@@ -3,14 +3,11 @@ pragma solidity >=0.8.0 <0.9.0;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 import "@openzeppelin/contracts/utils/cryptography/draft-EIP712.sol";
 import "./interfaces/ICMStaking.sol";
 import "./interfaces/IUtils.sol";
 
 abstract contract CMStaking is ICMStaking, Ownable, EIP712 {
-    using SafeMath for uint256;
-
     struct Stake {
         address staker;
         uint256 share;
@@ -25,12 +22,10 @@ abstract contract CMStaking is ICMStaking, Ownable, EIP712 {
     uint256 public totalShare;
 
     bytes32 private constant STAKE_SIGNATURE_HASH =
-        keccak256(
-            "Staked(address indexed user,uint256 amount,uint256 lockupPeriod)"
-        );
+        keccak256("Staked(address user,uint256 amount,uint256 lockupPeriod)");
 
     constructor(address _token) {
-        require(_token != address(0), "Token address should be non-zero");
+        require(_token != address(0), "Token cannot be zero address");
         token = _token;
     }
 
@@ -40,12 +35,11 @@ abstract contract CMStaking is ICMStaking, Ownable, EIP712 {
         uint256 endTime
     ) external onlyOwner {
         IUtils(utils).startSeason(reward, startTime, endTime);
-        emit SeasonStarted();
+        emit SeasonStarted(reward, startTime, endTime);
     }
 
-    function endSeason() external onlyOwner {
-        IUtils(utils).endSeason();
-        emit SeasonEnded();
+    function notifyReward() external {
+        IUtils(utils).notifyReward();
     }
 
     function stake(
@@ -55,7 +49,9 @@ abstract contract CMStaking is ICMStaking, Ownable, EIP712 {
         bytes32 r,
         bytes32 s
     ) external {
+        require(IUtils(utils).isActive(), "Not active season");
         require(amount > 0, "Amount should be bigger than zero");
+        require(lockupPeriod > 0, "Lockup period should be bigger than zero");
 
         bytes32 digest = keccak256(
             abi.encodePacked(
@@ -79,15 +75,13 @@ abstract contract CMStaking is ICMStaking, Ownable, EIP712 {
         require(recoveredAddress == msg.sender, "INVALID_SIGNATURE");
 
         IUtils(utils).notifyReward();
+        IERC20(token).transferFrom(msg.sender, address(this), amount);
 
-        uint256 share;
-        if (totalShare == 0) {
-            share = amount;
-        } else {
-            share = totalShare.mul(amount).div(
-                IERC20(token).balanceOf(address(this))
-            );
-        }
+        uint256 share = totalShare == 0
+            ? amount
+            : ((totalShare * amount) /
+                (IERC20(token).balanceOf(address(this))));
+
         stakes.push(
             Stake({
                 staker: msg.sender,
@@ -96,9 +90,9 @@ abstract contract CMStaking is ICMStaking, Ownable, EIP712 {
                 lockupPeriod: lockupPeriod
             })
         );
-        totalShare = totalShare.add(share);
+        totalShare += share;
 
-        emit Staked();
+        emit Staked(msg.sender, amount, lockupPeriod);
     }
 
     function withdraw(uint256 stakeId, uint256 amount)
@@ -123,24 +117,21 @@ abstract contract CMStaking is ICMStaking, Ownable, EIP712 {
     function _withdraw(
         address account,
         uint256 stakeId,
-        uint256 amount
-    ) private returns (uint256) {
+        uint256 share
+    ) private returns (uint256 amount) {
         Stake memory _stake = stakes[stakeId];
-        if (_stake.staker != account) {
-            return 0;
-        }
+        require(_stake.staker != account, "Caller is not staker");
+
         uint256 balance = IERC20(token).balanceOf(address(this));
-        uint256 availableAmount = balance.mul(_stake.share).div(totalShare);
-        if (availableAmount > amount) {
-            uint256 share = totalShare.mul(availableAmount.sub(amount)).div(
-                IERC20(token).balanceOf(address(this))
-            );
-            totalShare = totalShare.sub(_stake.share).add(share);
-            _stake.share = share;
-            return amount;
-        } else {
-            _stake.share = 0;
-            return availableAmount;
-        }
+        uint256 availableShare = _stake.share > share ? share : _stake.share;
+
+        amount = (balance * availableShare) / totalShare;
+        totalShare -= availableShare;
+        _stake.share -= availableShare;
+
+        (bool success, ) = account.call{value: amount}("");
+        require(success, "Withdraw failed");
+
+        emit Withdraw(account, stakeId, amount);
     }
 }

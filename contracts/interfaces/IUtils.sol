@@ -8,7 +8,7 @@ interface IUtils {
         uint256
     ) external;
 
-    function endSeason() external;
+    function isActive() external view returns (bool);
 
     function notifyReward() external;
 }
