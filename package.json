@@ -1,0 +1,17 @@
+{
+  "name": "cryptomeda-staking",
+  "version": "1.0.0",
+  "description": "",
+  "dependencies": {
+    "@openzeppelin/contracts": "^4.3.1"
+  },
+  "devDependencies": {
+    "@openzeppelin/test-helpers": "^0.5.13",
+    "@truffle/hdwallet-provider": "^1.5.0",
+    "chai": "^4.3.4",
+    "dotenv": "^10.0.0",
+    "prettier": "^2.3.2",
+    "prettier-plugin-solidity": "^1.0.0-beta.17",
+    "truffle-plugin-verify": "^0.5.14"
+  }
+}
