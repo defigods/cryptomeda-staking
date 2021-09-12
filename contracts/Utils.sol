@@ -41,10 +41,10 @@ contract Utils is IUtils, Ownable {
         }
 
         reward = _reward;
-        rewardPerSecond = (reward * 1e10) / (_endTime - _startTime);
         startTime = _startTime;
         endTime = _endTime;
         lastClaimedTime = startTime;
+        rewardPerSecond = (reward * 1e10) / (endTime - startTime);
     }
 
     function notifyReward() public override {
@@ -52,8 +52,9 @@ contract Utils is IUtils, Ownable {
         uint256 lastTime = block.timestamp > endTime
             ? endTime
             : block.timestamp;
-        uint256 _reward = rewardPerSecond * (lastTime - lastClaimedTime);
-        IERC20(ICMStaking(vault).token()).transfer(vault, _reward);
+        uint256 _reward = (rewardPerSecond * (lastTime - lastClaimedTime)) /
+            1e10;
+        IERC20(ICMStaking(vault).stakingToken()).transfer(vault, _reward);
         lastClaimedTime = lastTime;
     }
 

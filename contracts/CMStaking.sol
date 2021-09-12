@@ -38,7 +38,7 @@ abstract contract CMStaking is ICMStaking, Ownable, EIP712 {
         emit SeasonStarted(reward, startTime, endTime);
     }
 
-    function notifyReward() external {
+    function notifyReward() public {
         IUtils(utils).notifyReward();
     }
 
@@ -74,7 +74,7 @@ abstract contract CMStaking is ICMStaking, Ownable, EIP712 {
         address recoveredAddress = ecrecover(digest, v, r, s);
         require(recoveredAddress == msg.sender, "INVALID_SIGNATURE");
 
-        IUtils(utils).notifyReward();
+        notifyReward();
         IERC20(token).transferFrom(msg.sender, address(this), amount);
 
         uint256 share = totalShare == 0
@@ -99,8 +99,9 @@ abstract contract CMStaking is ICMStaking, Ownable, EIP712 {
         external
         returns (uint256 amountOut)
     {
-        IUtils(utils).notifyReward();
+        notifyReward();
         amountOut = _withdraw(msg.sender, stakeId, amount);
+        IERC20(token).transfer(msg.sender, amountOut);
     }
 
     function withdraw(uint256[] memory stakeIds, uint256[] memory amounts)
@@ -108,10 +109,14 @@ abstract contract CMStaking is ICMStaking, Ownable, EIP712 {
         returns (uint256[] memory amountOuts)
     {
         require(stakeIds.length == amounts.length, "Invalid argument");
-        IUtils(utils).notifyReward();
+        notifyReward();
+
+        uint256 amount;
         for (uint256 i = 0; i < stakeIds.length; i++) {
             amountOuts[i] = _withdraw(msg.sender, stakeIds[i], amounts[i]);
+            amount += amountOuts[i];
         }
+        IERC20(token).transfer(msg.sender, amount);
     }
 
     function _withdraw(
@@ -128,9 +133,6 @@ abstract contract CMStaking is ICMStaking, Ownable, EIP712 {
         amount = (balance * availableShare) / totalShare;
         totalShare -= availableShare;
         _stake.share -= availableShare;
-
-        (bool success, ) = account.call{value: amount}("");
-        require(success, "Withdraw failed");
 
         emit Withdraw(account, stakeId, amount);
     }
