@@ -3,11 +3,10 @@ pragma solidity >=0.8.0 <0.9.0;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "@openzeppelin/contracts/utils/cryptography/draft-EIP712.sol";
 import "./interfaces/ICMStaking.sol";
 import "./interfaces/IUtils.sol";
 
-abstract contract CMStaking is ICMStaking, Ownable, EIP712 {
+contract CMStaking is ICMStaking, Ownable {
     struct Stake {
         address staker;
         uint256 share;
@@ -20,13 +19,20 @@ abstract contract CMStaking is ICMStaking, Ownable, EIP712 {
 
     Stake[] public stakes;
     uint256 public totalShare;
+    mapping(address => uint256) public nonces;
 
     bytes32 private constant STAKE_SIGNATURE_HASH =
-        keccak256("Staked(address user,uint256 amount,uint256 lockupPeriod)");
+        keccak256(
+            "Staked(bytes32 warning,address user,uint256 amount,uint256 lockupPeriod,uint256 nonce)"
+        );
 
     constructor(address _token) {
         require(_token != address(0), "Token cannot be zero address");
         token = _token;
+    }
+
+    function stakingToken() external view override returns (address) {
+        return token;
     }
 
     function startSeason(
@@ -54,20 +60,15 @@ abstract contract CMStaking is ICMStaking, Ownable, EIP712 {
         require(lockupPeriod > 0, "Lockup period should be bigger than zero");
 
         bytes32 digest = keccak256(
-            abi.encodePacked(
-                "\x19\x01",
-                _domainSeparatorV4(),
+            abi.encode(
+                STAKE_SIGNATURE_HASH,
                 keccak256(
-                    abi.encode(
-                        STAKE_SIGNATURE_HASH,
-                        keccak256(
-                            "You can stake only through our platform, read more here: https://cryptomeda.tech/staking"
-                        ),
-                        msg.sender,
-                        amount,
-                        lockupPeriod
-                    )
-                )
+                    "You can stake only through our platform, read more here: https://cryptomeda.tech/staking"
+                ),
+                msg.sender,
+                amount,
+                lockupPeriod,
+                nonces[msg.sender]++
             )
         );
 
