@@ -9,7 +9,7 @@ module.exports = async function (deployer) {
   await deployer.deploy(CMStaking, token.address);
   const staking = await CMStaking.deployed();
 
-  await deployer.deploy(Utils);
+  await deployer.deploy(Utils, staking.address);
   const utils = await Utils.deployed();
-  await utils.setVault(staking.address);
+  await staking.setHelper(utils.address);
 };

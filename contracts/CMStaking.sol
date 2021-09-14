@@ -10,85 +10,47 @@ contract CMStaking is ICMStaking, Ownable {
     struct Stake {
         address staker;
         uint256 share;
-        uint256 stakeTime;
-        uint256 lockupPeriod;
+        uint256 lockupEndTime;
     }
 
-    address immutable token;
+    address public immutable override stakingToken;
     address public utils;
 
     Stake[] public stakes;
     uint256 public totalShare;
-    mapping(address => uint256) public nonces;
 
-    bytes32 private constant STAKE_SIGNATURE_HASH =
-        keccak256(
-            "Staked(bytes32 warning,address user,uint256 amount,uint256 lockupPeriod,uint256 nonce)"
-        );
+    modifier notifyReward() {
+        IUtils(utils).notifyReward();
+        _;
+    }
 
     constructor(address _token) {
         require(_token != address(0), "Token cannot be zero address");
-        token = _token;
+        stakingToken = _token;
     }
 
-    function stakingToken() external view override returns (address) {
-        return token;
+    function setHelper(address _utils) external onlyOwner {
+        require(_utils != address(0), "Helper cannot be zero address");
+        utils = _utils;
     }
 
-    function startSeason(
-        uint256 reward,
-        uint256 startTime,
-        uint256 endTime
-    ) external onlyOwner {
-        IUtils(utils).startSeason(reward, startTime, endTime);
-        emit SeasonStarted(reward, startTime, endTime);
-    }
-
-    function notifyReward() public {
-        IUtils(utils).notifyReward();
-    }
-
-    function stake(
-        uint256 amount,
-        uint256 lockupPeriod,
-        uint8 v,
-        bytes32 r,
-        bytes32 s
-    ) external {
+    function stake(uint256 amount, uint256 lockupPeriod) external notifyReward {
         require(IUtils(utils).isActive(), "Not active season");
         require(amount > 0, "Amount should be bigger than zero");
         require(lockupPeriod > 0, "Lockup period should be bigger than zero");
 
-        bytes32 digest = keccak256(
-            abi.encode(
-                STAKE_SIGNATURE_HASH,
-                keccak256(
-                    "You can stake only through our platform, read more here: https://cryptomeda.tech/staking"
-                ),
-                msg.sender,
-                amount,
-                lockupPeriod,
-                nonces[msg.sender]++
-            )
-        );
-
-        address recoveredAddress = ecrecover(digest, v, r, s);
-        require(recoveredAddress == msg.sender, "INVALID_SIGNATURE");
-
-        notifyReward();
-        IERC20(token).transferFrom(msg.sender, address(this), amount);
+        IERC20(stakingToken).transferFrom(msg.sender, address(this), amount);
 
         uint256 share = totalShare == 0
             ? amount
             : ((totalShare * amount) /
-                (IERC20(token).balanceOf(address(this))));
+                (IERC20(stakingToken).balanceOf(address(this))));
 
         stakes.push(
             Stake({
                 staker: msg.sender,
                 share: share,
-                stakeTime: block.timestamp,
-                lockupPeriod: lockupPeriod
+                lockupEndTime: block.timestamp + lockupPeriod
             })
         );
         totalShare += share;
@@ -98,26 +60,25 @@ contract CMStaking is ICMStaking, Ownable {
 
     function withdraw(uint256 stakeId, uint256 amount)
         external
+        notifyReward
         returns (uint256 amountOut)
     {
-        notifyReward();
         amountOut = _withdraw(msg.sender, stakeId, amount);
-        IERC20(token).transfer(msg.sender, amountOut);
+        IERC20(stakingToken).transfer(msg.sender, amountOut);
     }
 
-    function withdraw(uint256[] memory stakeIds, uint256[] memory amounts)
-        external
-        returns (uint256[] memory amountOuts)
-    {
+    function withdrawBatch(
+        uint256[] calldata stakeIds,
+        uint256[] calldata amounts
+    ) external notifyReward returns (uint256[] memory amountOuts) {
         require(stakeIds.length == amounts.length, "Invalid argument");
-        notifyReward();
 
         uint256 amount;
         for (uint256 i = 0; i < stakeIds.length; i++) {
             amountOuts[i] = _withdraw(msg.sender, stakeIds[i], amounts[i]);
             amount += amountOuts[i];
         }
-        IERC20(token).transfer(msg.sender, amount);
+        IERC20(stakingToken).transfer(msg.sender, amount);
     }
 
     function _withdraw(
@@ -125,10 +86,14 @@ contract CMStaking is ICMStaking, Ownable {
         uint256 stakeId,
         uint256 share
     ) private returns (uint256 amount) {
-        Stake memory _stake = stakes[stakeId];
-        require(_stake.staker != account, "Caller is not staker");
+        Stake storage _stake = stakes[stakeId];
+        require(_stake.staker == account, "Caller is not staker");
+        require(
+            block.timestamp >= _stake.lockupEndTime,
+            "Lockup duration not passed yet"
+        );
 
-        uint256 balance = IERC20(token).balanceOf(address(this));
+        uint256 balance = IERC20(stakingToken).balanceOf(address(this));
         uint256 availableShare = _stake.share > share ? share : _stake.share;
 
         amount = (balance * availableShare) / totalShare;

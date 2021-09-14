@@ -10,8 +10,10 @@
     "@truffle/hdwallet-provider": "^1.5.0",
     "chai": "^4.3.4",
     "dotenv": "^10.0.0",
+    "ethereumjs-util": "^5.2.1",
     "prettier": "^2.3.2",
     "prettier-plugin-solidity": "^1.0.0-beta.17",
-    "truffle-plugin-verify": "^0.5.14"
+    "truffle-plugin-verify": "^0.5.14",
+    "web3": "^1.5.2"
   }
 }

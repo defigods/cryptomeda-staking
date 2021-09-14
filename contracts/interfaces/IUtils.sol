@@ -11,4 +11,6 @@ interface IUtils {
     function isActive() external view returns (bool);
 
     function notifyReward() external;
+
+    event SeasonStarted(uint256 reward, uint256 startTime, uint256 endTime);
 }
