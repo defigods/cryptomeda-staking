@@ -45,17 +45,18 @@ contract CMStaking is ICMStaking, Ownable {
             ? amount
             : ((totalShare * amount) /
                 (IERC20(stakingToken).balanceOf(address(this))));
+        uint256 lockupEndTime = block.timestamp + lockupPeriod;
 
         stakes.push(
             Stake({
                 staker: msg.sender,
                 share: share,
-                lockupEndTime: block.timestamp + lockupPeriod
+                lockupEndTime: lockupEndTime
             })
         );
         totalShare += share;
 
-        emit Staked(msg.sender, amount, lockupPeriod);
+        emit Staked(msg.sender, share, lockupEndTime);
     }
 
     function withdraw(uint256 stakeId, uint256 amount)
@@ -100,6 +101,6 @@ contract CMStaking is ICMStaking, Ownable {
         totalShare -= availableShare;
         _stake.share -= availableShare;
 
-        emit Withdraw(account, stakeId, amount);
+        emit Withdraw(stakeId, share);
     }
 }
