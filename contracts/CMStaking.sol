@@ -74,6 +74,7 @@ contract CMStaking is ICMStaking, Ownable {
     ) external notifyReward returns (uint256[] memory amountOuts) {
         require(stakeIds.length == amounts.length, "Invalid argument");
 
+        amountOuts = new uint256[](stakeIds.length);
         uint256 amount;
         for (uint256 i = 0; i < stakeIds.length; i++) {
             amountOuts[i] = _withdraw(msg.sender, stakeIds[i], amounts[i]);
